@@ -290,6 +290,19 @@ backup_code_only() {
     --exclude '/upload/' \
     --exclude '/code-backups/' \
     "$APP_DIR/" "$CODE_BACKUP_DIR/"
+  prune_code_backups
+}
+
+prune_code_backups() {
+  local backup_root="$APP_DIR/code-backups"
+  local -a backups=()
+  local index
+
+  mapfile -t backups < <(find "$backup_root" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' | sort -rn | cut -d' ' -f2-)
+  for ((index = 2; index < ${#backups[@]}; index++)); do
+    log "删除旧代码备份：${backups[$index]}"
+    rm -rf -- "${backups[$index]}"
+  done
 }
 
 deploy_staging() {
