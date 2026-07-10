@@ -241,8 +241,11 @@ copy_static_assets() {
   log "准备 geodata、i18n 和根配置文件"
   if [ -d "$BUILD_DIR/geodata" ]; then
     rsync -a --delete "$BUILD_DIR/geodata/" "$STAGING_DIR/geodata/"
+  elif geodata_complete "$APP_DIR/geodata"; then
+    log "复用现有 geodata"
+    rsync -a --delete "$APP_DIR/geodata/" "$STAGING_DIR/geodata/"
   else
-    log "源码中没有 geodata 目录，跳过 geodata 同步"
+    download_geodata "$STAGING_DIR/geodata"
   fi
   rsync -a --delete "$BUILD_DIR/i18n/" "$STAGING_DIR/i18n/"
   install -m 0644 "$BUILD_DIR/package.json" "$STAGING_DIR/package.json"
@@ -250,6 +253,34 @@ copy_static_assets() {
   install -m 0644 "$BUILD_DIR/pnpm-workspace.yaml" "$STAGING_DIR/pnpm-workspace.yaml"
   install -m 0644 "$BUILD_DIR/.pnpmfile.cjs" "$STAGING_DIR/.pnpmfile.cjs"
   install -m 0644 "$BUILD_DIR/LICENSE" "$STAGING_DIR/LICENSE"
+}
+
+geodata_complete() {
+  local dir="$1"
+  [ -s "$dir/admin1CodesASCII.txt" ] &&
+    [ -s "$dir/admin2Codes.txt" ] &&
+    [ -s "$dir/cities500.txt" ] &&
+    [ -s "$dir/geodata-date.txt" ] &&
+    [ -s "$dir/ne_10m_admin_0_countries.geojson" ]
+}
+
+download_geodata() {
+  local dir="$1"
+  local geonames=https://download.geonames.org/export/dump
+  local natural_earth=https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v5.1.2/geojson/ne_10m_admin_0_countries.geojson
+
+  require_command unzip
+  log "下载 Immich geodata"
+  rm -rf "$dir"
+  mkdir -p "$dir"
+  curl -fL --retry 4 --retry-all-errors "$geonames/cities500.zip" -o "$dir/cities500.zip"
+  curl -fL --retry 4 --retry-all-errors "$geonames/admin1CodesASCII.txt" -o "$dir/admin1CodesASCII.txt"
+  curl -fL --retry 4 --retry-all-errors "$geonames/admin2Codes.txt" -o "$dir/admin2Codes.txt"
+  curl -fL --retry 4 --retry-all-errors "$natural_earth" -o "$dir/ne_10m_admin_0_countries.geojson"
+  unzip -oq "$dir/cities500.zip" -d "$dir"
+  rm -f "$dir/cities500.zip"
+  date --iso-8601=seconds | tr -d '\n' > "$dir/geodata-date.txt"
+  chmod 0444 "$dir"/*
 }
 
 backup_code_only() {
