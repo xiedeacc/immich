@@ -293,7 +293,10 @@ deploy_staging() {
   install -m 0644 "$STAGING_DIR/.pnpmfile.cjs" "$APP_DIR/.pnpmfile.cjs"
   install -m 0644 "$STAGING_DIR/LICENSE" "$APP_DIR/LICENSE"
 
-  code_paths=("$APP_DIR/server" "$APP_DIR/web" "$APP_DIR/www" "$APP_DIR/machine-learning" "$APP_DIR/plugins" "$APP_DIR/geodata" "$APP_DIR/i18n" "$APP_DIR/package.json" "$APP_DIR/pnpm-lock.yaml" "$APP_DIR/pnpm-workspace.yaml" "$APP_DIR/.pnpmfile.cjs" "$APP_DIR/LICENSE")
+  code_paths=("$APP_DIR/server" "$APP_DIR/web" "$APP_DIR/www" "$APP_DIR/machine-learning" "$APP_DIR/plugins" "$APP_DIR/i18n" "$APP_DIR/package.json" "$APP_DIR/pnpm-lock.yaml" "$APP_DIR/pnpm-workspace.yaml" "$APP_DIR/.pnpmfile.cjs" "$APP_DIR/LICENSE")
+  if [ -d "$APP_DIR/geodata" ]; then
+    code_paths+=("$APP_DIR/geodata")
+  fi
   if [ -d "$APP_DIR/cli" ]; then
     code_paths+=("$APP_DIR/cli")
   fi
@@ -307,7 +310,10 @@ deploy_staging() {
 
 fix_code_permissions() {
   log "修正代码目录权限，保证 Nginx 和 systemd 服务可读"
-  code_dirs=("$APP_DIR/server" "$APP_DIR/web" "$APP_DIR/machine-learning" "$APP_DIR/plugins" "$APP_DIR/geodata" "$APP_DIR/i18n")
+  code_dirs=("$APP_DIR/server" "$APP_DIR/web" "$APP_DIR/machine-learning" "$APP_DIR/plugins" "$APP_DIR/i18n")
+  if [ -d "$APP_DIR/geodata" ]; then
+    code_dirs+=("$APP_DIR/geodata")
+  fi
   if [ -d "$APP_DIR/cli" ]; then
     code_dirs+=("$APP_DIR/cli")
   fi
