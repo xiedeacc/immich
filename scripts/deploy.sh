@@ -128,21 +128,30 @@ prepare_source() {
 }
 
 build_server() {
-  log "构建 server 和 CLI"
+  log "构建 server"
   export PATH="$NODE_HOME/bin:$PATH"
   export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
   export SHARP_IGNORE_GLOBAL_LIBVIPS=true
 
   cd "$BUILD_DIR"
-  "$PNPM_BIN" --filter @immich/sdk --filter @immich/plugin-sdk --filter immich --filter @immich/cli install --frozen-lockfile
-  "$PNPM_BIN" --filter @immich/sdk --filter @immich/plugin-sdk --filter immich --filter @immich/cli build
+  if [ -d "$BUILD_DIR/cli" ]; then
+    "$PNPM_BIN" --filter @immich/sdk --filter @immich/plugin-sdk --filter immich --filter @immich/cli install --frozen-lockfile
+    "$PNPM_BIN" --filter @immich/sdk --filter @immich/plugin-sdk --filter immich --filter @immich/cli build
+  else
+    "$PNPM_BIN" --filter @immich/sdk --filter @immich/plugin-sdk --filter immich install --frozen-lockfile
+    "$PNPM_BIN" --filter @immich/sdk --filter @immich/plugin-sdk --filter immich build
+  fi
 
   export SHARP_FORCE_GLOBAL_LIBVIPS=true
   "$PNPM_BIN" --filter immich --prod deploy "$STAGING_DIR/server"
   rebuild_sharp_with_system_libvips "$STAGING_DIR/server"
-  "$PNPM_BIN" --filter @immich/cli --prod --no-optional deploy "$STAGING_DIR/cli"
-
-  ln -sfn ../../cli/bin/immich "$STAGING_DIR/server/bin/immich"
+  if [ -d "$BUILD_DIR/cli" ]; then
+    log "构建 CLI"
+    "$PNPM_BIN" --filter @immich/cli --prod --no-optional deploy "$STAGING_DIR/cli"
+    ln -sfn ../../cli/bin/immich "$STAGING_DIR/server/bin/immich"
+  else
+    log "当前源码不包含 CLI workspace，跳过 CLI"
+  fi
   verify_sharp_runtime "$STAGING_DIR/server"
 }
 
@@ -152,6 +161,17 @@ rebuild_sharp_with_system_libvips() {
   log "重编译 sharp，使其链接系统 libvips 并支持 HEIC"
   require_command pkg-config
   pkg-config --atleast-version=8.17.3 vips-cpp || die "系统 libvips 版本不足，sharp 需要 vips-cpp >= 8.17.3"
+
+  # pnpm's isolated layout can leave node-gyp's relative lookup one directory
+  # above the deployed server tree. Expose that package at the expected path.
+  node_gyp_pkg="$(find "$server_dir/node_modules/.pnpm" -maxdepth 1 -type d -name 'node-gyp@*' 2>/dev/null | head -1)"
+  if [ -n "$node_gyp_pkg" ]; then
+    node_gyp_base="$(basename "$node_gyp_pkg")"
+    node_gyp_link="$STAGING_DIR/$node_gyp_base"
+    if [ ! -e "$node_gyp_link" ]; then
+      ln -s "server/node_modules/.pnpm/$node_gyp_base" "$node_gyp_link"
+    fi
+  fi
 
   cd "$server_dir/node_modules/sharp"
   env -u SHARP_IGNORE_GLOBAL_LIBVIPS \
@@ -199,7 +219,7 @@ build_plugins() {
   export MISE_CACHE_DIR
 
   cd "$BUILD_DIR"
-  MISE_TRUSTED_CONFIG_PATHS="$BUILD_DIR/mise.toml" MISE_DISABLE_TOOLS=flutter "$TOOL_BIN/mise" //:plugins
+  MISE_TRUSTED_CONFIG_PATHS="$REPO_DIR/mise.toml:$BUILD_DIR/mise.toml" MISE_DISABLE_TOOLS=flutter "$TOOL_BIN/mise" //:plugins
 
   install -d "$STAGING_DIR/plugins/immich-plugin-core"
   rsync -a --delete "$BUILD_DIR/packages/plugin-core/dist/" "$STAGING_DIR/plugins/immich-plugin-core/dist/"
@@ -214,7 +234,7 @@ build_machine_learning() {
     "$BUILD_DIR/machine-learning/" "$STAGING_DIR/machine-learning/"
 
   cd "$STAGING_DIR/machine-learning"
-  UV_PYTHON_INSTALL_DIR="$UV_PYTHON_INSTALL_DIR" UV_LINK_MODE=copy "$UV_BIN" sync --locked --extra cpu --no-dev --compile-bytecode
+  UV_PYTHON_INSTALL_DIR="$UV_PYTHON_INSTALL_DIR" UV_LINK_MODE=copy "$UV_BIN" sync --extra cpu --no-dev --compile-bytecode
 }
 
 copy_static_assets() {
@@ -262,14 +282,22 @@ deploy_staging() {
     log "staging 中没有 geodata 目录，保留现有 $APP_DIR/geodata"
   fi
   rsync -a --delete "$STAGING_DIR/i18n/" "$APP_DIR/i18n/"
-  rsync -a "$STAGING_DIR/cli/" "$APP_DIR/cli/"
+  if [ -d "$STAGING_DIR/cli" ]; then
+    rsync -a --delete "$STAGING_DIR/cli/" "$APP_DIR/cli/"
+  else
+    rm -rf "$APP_DIR/cli"
+  fi
   install -m 0644 "$STAGING_DIR/package.json" "$APP_DIR/package.json"
   install -m 0644 "$STAGING_DIR/pnpm-lock.yaml" "$APP_DIR/pnpm-lock.yaml"
   install -m 0644 "$STAGING_DIR/pnpm-workspace.yaml" "$APP_DIR/pnpm-workspace.yaml"
   install -m 0644 "$STAGING_DIR/.pnpmfile.cjs" "$APP_DIR/.pnpmfile.cjs"
   install -m 0644 "$STAGING_DIR/LICENSE" "$APP_DIR/LICENSE"
 
-  chown -R "$RUN_USER:$RUN_GROUP" "$APP_DIR/server" "$APP_DIR/web" "$APP_DIR/www" "$APP_DIR/machine-learning" "$APP_DIR/plugins" "$APP_DIR/geodata" "$APP_DIR/i18n" "$APP_DIR/cli" "$APP_DIR/package.json" "$APP_DIR/pnpm-lock.yaml" "$APP_DIR/pnpm-workspace.yaml" "$APP_DIR/.pnpmfile.cjs" "$APP_DIR/LICENSE"
+  code_paths=("$APP_DIR/server" "$APP_DIR/web" "$APP_DIR/www" "$APP_DIR/machine-learning" "$APP_DIR/plugins" "$APP_DIR/geodata" "$APP_DIR/i18n" "$APP_DIR/package.json" "$APP_DIR/pnpm-lock.yaml" "$APP_DIR/pnpm-workspace.yaml" "$APP_DIR/.pnpmfile.cjs" "$APP_DIR/LICENSE")
+  if [ -d "$APP_DIR/cli" ]; then
+    code_paths+=("$APP_DIR/cli")
+  fi
+  chown -R "$RUN_USER:$RUN_GROUP" "${code_paths[@]}"
   fix_code_permissions
 
   log "启动 Immich 服务"
@@ -279,9 +307,17 @@ deploy_staging() {
 
 fix_code_permissions() {
   log "修正代码目录权限，保证 Nginx 和 systemd 服务可读"
-  find "$APP_DIR/server" "$APP_DIR/web" "$APP_DIR/machine-learning" "$APP_DIR/plugins" "$APP_DIR/geodata" "$APP_DIR/i18n" "$APP_DIR/cli" -type d -exec chmod 0755 {} +
-  find "$APP_DIR/server" "$APP_DIR/web" "$APP_DIR/machine-learning" "$APP_DIR/plugins" "$APP_DIR/geodata" "$APP_DIR/i18n" "$APP_DIR/cli" -type f -exec chmod 0644 {} +
-  find "$APP_DIR/server/node_modules" "$APP_DIR/machine-learning/.venv/bin" "$APP_DIR/cli/bin" -type f -perm /111 -exec chmod 0755 {} + 2>/dev/null || true
+  code_dirs=("$APP_DIR/server" "$APP_DIR/web" "$APP_DIR/machine-learning" "$APP_DIR/plugins" "$APP_DIR/geodata" "$APP_DIR/i18n")
+  if [ -d "$APP_DIR/cli" ]; then
+    code_dirs+=("$APP_DIR/cli")
+  fi
+  find "${code_dirs[@]}" -type d -exec chmod 0755 {} +
+  find "${code_dirs[@]}" -type f -exec chmod 0644 {} +
+  executable_dirs=("$APP_DIR/server/node_modules" "$APP_DIR/machine-learning/.venv/bin")
+  if [ -d "$APP_DIR/cli/bin" ]; then
+    executable_dirs+=("$APP_DIR/cli/bin")
+  fi
+  find "${executable_dirs[@]}" -type f -perm /111 -exec chmod 0755 {} + 2>/dev/null || true
   find "$APP_DIR/server/node_modules/.bin" -xtype f -exec chmod 0755 {} + 2>/dev/null || true
   find "$APP_DIR/server/node_modules/.pnpm" -path '*/node_modules/*/bin/*' -type f -exec chmod 0755 {} + 2>/dev/null || true
   find "$APP_DIR/server/node_modules/.pnpm" -path '*/node_modules/.bin/*' -xtype f -exec chmod 0755 {} + 2>/dev/null || true
