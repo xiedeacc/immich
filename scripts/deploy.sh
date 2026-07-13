@@ -2,11 +2,11 @@
 set -Eeuo pipefail
 
 VERSION="${VERSION:-v3.0.1}"
-REPO_DIR="${REPO_DIR:-/opt/software/src/immich}"
+REPO_DIR="${REPO_DIR:-/opt/src/software/immich}"
 APP_DIR="${APP_DIR:-/opt/immich}"
 UPLOAD_DIR="${UPLOAD_DIR:-/opt/immich/upload}"
 BUILD_ROOT="${BUILD_ROOT:-$REPO_DIR/immich-build}"
-TOOL_ROOT="${TOOL_ROOT:-/opt/software/src/tools}"
+TOOL_ROOT="${TOOL_ROOT:-/opt/src/software/tools}"
 RUN_USER="${RUN_USER:-tiger}"
 RUN_GROUP="${RUN_GROUP:-tiger}"
 TOOL_BIN="$TOOL_ROOT/bin"
@@ -15,7 +15,7 @@ MISE_CACHE_DIR="${MISE_CACHE_DIR:-$TOOL_ROOT/mise-cache}"
 MISE_VERSION="${MISE_VERSION:-v2026.6.10}"
 UV_VERSION="${UV_VERSION:-0.8.15}"
 UV_PYTHON_INSTALL_DIR="${UV_PYTHON_INSTALL_DIR:-$TOOL_ROOT/uv-python}"
-NODE_HOME="${NODE_HOME:-/opt/software/src/tools/nvm/versions/node/v24.18.0}"
+NODE_HOME="${NODE_HOME:-/opt/src/software/tools/nvm/versions/node/v24.18.0}"
 PNPM_BIN="${PNPM_BIN:-$NODE_HOME/bin/pnpm}"
 NODE_BIN="${NODE_BIN:-$NODE_HOME/bin/node}"
 NPM_BIN="${NPM_BIN:-$NODE_HOME/bin/npm}"
@@ -173,6 +173,14 @@ rebuild_sharp_with_system_libvips() {
     fi
   fi
 
+  node_gyp_pkg="$(find "$server_dir/node_modules/.pnpm" -maxdepth 1 -type d -name 'node-gyp@*' 2>/dev/null | head -1)"
+  if [ -n "$node_gyp_pkg" ]; then
+    node_gyp_base="$(basename "$node_gyp_pkg")"
+    node_gyp_link="$STAGING_DIR/$node_gyp_base"
+    if [ ! -e "$node_gyp_link" ]; then
+      ln -s "server/node_modules/.pnpm/$node_gyp_base" "$node_gyp_link" 2>/dev/null || true
+    fi
+  fi
   cd "$server_dir/node_modules/sharp"
   env -u SHARP_IGNORE_GLOBAL_LIBVIPS \
     PATH="$server_dir/node_modules/sharp/node_modules/.bin:$NODE_HOME/bin:$PATH" \
