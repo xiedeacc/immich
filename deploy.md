@@ -13,7 +13,7 @@
 - 机器学习服务目录：`/opt/immich/machine-learning`
 - 上传和媒体数据目录：`/opt/immich/upload`
 - 运行用户/用户组：`tiger:tiger`
-- root/tiger 共享 nvm 目录：`/opt/software/src/tools/nvm`
+- root nvm 目录：`/root/.nvm`
 - 当前 Immich 版本：`3.0.1`
 - 当前线上版本：`3.0.1`
 - 本次升级前版本：`2.5.6`
@@ -30,7 +30,7 @@
 - 启动命令：
 
 ```bash
-/opt/software/src/tools/nvm/versions/node/v24.18.0/bin/node /opt/immich/server/dist/main.js
+/root/.nvm/versions/node/v24.18.0/bin/node /opt/immich/server/dist/main.js
 ```
 
 ### Immich Machine Learning
@@ -310,14 +310,14 @@ systemctl is-enabled immich.service immich-ml.service postgresql@16-main.service
 升级脚本：
 
 ```text
-/opt/software/src/immich/scripts/deploy.sh
+/root/src/software/immich/scripts/deploy.sh
 ```
 
 脚本目标：
 
 - 从当前仓库拉取 `v3.0.1` tag
-- 在 `/opt/software/src/immich/immich-build` 下创建临时 worktree 和 staging 目录
-- 缺失工具安装到 `/opt/software/src/tools`
+- 在 `/root/src/software/immich/immich-build` 下创建临时 worktree 和 staging 目录
+- 缺失工具安装到 `/root/src/software/tools`
 - 构建 server、web、CLI、core plugin 和 machine-learning
 - 停止 `immich.service` 和 `immich-ml.service`
 - 只同步代码和构建产物到 `/opt/immich`
@@ -330,12 +330,12 @@ systemctl is-enabled immich.service immich-ml.service postgresql@16-main.service
 
 - 需要 root 权限
 - 需要本机已安装 `git`、`rsync`、`curl`
-- 需要 `/opt/software/src/tools/nvm/versions/node/v24.18.0/bin/node`
-- 需要 `/opt/software/src/tools/nvm/versions/node/v24.18.0/bin/pnpm`
-- 如果缺少 `mise`，脚本会自动安装 `mise 2026.6.10` 到 `/opt/software/src/tools/bin/mise`
-- 如果缺少 `uv` 或版本不匹配，脚本会自动安装 `uv 0.8.15` 到 `/opt/software/src/tools/bin/uv`
+- 需要 `/root/.nvm` 中 default Node 版本提供 `node`
+- 需要 `/root/.nvm` 中 default Node 版本提供 `pnpm`
+- 如果缺少 `mise`，脚本会自动安装 `mise 2026.6.10` 到 `/root/src/software/tools/bin/mise`
+- 如果缺少 `uv` 或版本不匹配，脚本会自动安装 `uv 0.8.15` 到 `/root/src/software/tools/bin/uv`
 - `mise` 用于构建 v3 的 core plugin
-- `uv` 的 Python 安装目录固定为 `/opt/software/src/tools/uv-python`，并使用 copy 模式，避免虚拟环境指向 root 私有目录
+- `uv` 的 Python 安装目录固定为 `/root/src/software/tools/uv-python`，并使用 copy 模式，避免虚拟环境指向 root 私有目录
 
 明确保护：
 
@@ -357,5 +357,5 @@ systemctl is-enabled immich.service immich-ml.service postgresql@16-main.service
 执行方式：
 
 ```bash
-/opt/software/src/immich/scripts/deploy.sh
+/root/src/software/immich/scripts/deploy.sh
 ```
