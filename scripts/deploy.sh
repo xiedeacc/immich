@@ -252,6 +252,43 @@ build_machine_learning() {
   UV_PYTHON_INSTALL_DIR="$UV_PYTHON_INSTALL_DIR" UV_LINK_MODE=copy "$UV_BIN" sync --extra cpu --no-dev --compile-bytecode
 }
 
+detect_uv_python_home() {
+  local python_home
+  python_home="$(find "$UV_PYTHON_INSTALL_DIR" -mindepth 1 -maxdepth 1 -type d -name 'cpython-*' | sort | tail -1)"
+  [ -n "$python_home" ] || die "未找到 uv Python 安装目录：$UV_PYTHON_INSTALL_DIR/cpython-*"
+  [ -d "$python_home" ] || die "uv Python 安装目录不存在：$python_home"
+  printf '%s\n' "$python_home"
+}
+
+detect_uv_python_bin() {
+  local python_home="$1"
+  local python_bin
+  python_bin="$(find "$python_home/bin" -maxdepth 1 -type f -name 'python3.*' -perm /111 | sort | tail -1)"
+  [ -n "$python_bin" ] || die "未找到 uv Python 可执行文件：$python_home/bin/python3.*"
+  [ -x "$python_bin" ] || die "uv Python 不可执行：$python_bin"
+  printf '%s\n' "$python_bin"
+}
+
+repair_machine_learning_python_runtime() {
+  local python_home python_bin python_name service_dropin
+  python_home="$(detect_uv_python_home)"
+  python_bin="$(detect_uv_python_bin "$python_home")"
+  python_name="$(basename "$python_bin")"
+
+  log "修复 machine-learning Python runtime：$python_bin"
+  ln -sfn "$python_bin" "$APP_DIR/machine-learning/.venv/bin/python"
+  ln -sfn python "$APP_DIR/machine-learning/.venv/bin/python3"
+  ln -sfn python "$APP_DIR/machine-learning/.venv/bin/$python_name"
+
+  service_dropin="/etc/systemd/system/immich-ml.service.d/pythonhome.conf"
+  mkdir -p "$(dirname "$service_dropin")"
+  cat > "$service_dropin" <<EOF
+[Service]
+Environment="PYTHONHOME=$python_home"
+EOF
+  systemctl daemon-reload
+}
+
 copy_static_assets() {
   log "准备 geodata、i18n 和根配置文件"
   if [ -d "$BUILD_DIR/geodata" ]; then
@@ -361,6 +398,7 @@ deploy_staging() {
   fi
   chown -R "$RUN_USER:$RUN_GROUP" "${code_paths[@]}"
   fix_code_permissions
+  repair_machine_learning_python_runtime
 
   log "启动 Immich 服务"
   systemctl start immich-ml.service

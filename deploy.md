@@ -335,7 +335,7 @@ systemctl is-enabled immich.service immich-ml.service postgresql@16-main.service
 - 如果缺少 `mise`，脚本会自动安装 `mise 2026.6.10` 到 `/root/src/software/tools/bin/mise`
 - 如果缺少 `uv` 或版本不匹配，脚本会自动安装 `uv 0.8.15` 到 `/root/src/software/tools/bin/uv`
 - `mise` 用于构建 v3 的 core plugin
-- `uv` 的 Python 安装目录固定为 `/root/src/software/tools/uv-python`，并使用 copy 模式，避免虚拟环境指向 root 私有目录
+- `uv` 的 Python 安装目录固定为 `/root/src/software/tools/uv-python`，并使用 copy 模式；部署脚本会修复 machine-learning venv 的 Python symlink，并为 `immich-ml.service` 写入 `PYTHONHOME`
 
 明确保护：
 
